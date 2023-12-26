@@ -10,17 +10,47 @@ data Inst =
   deriving Show
 type Code = [Inst]
 
--- createEmptyStack :: Stack
-createEmptyStack = undefined -- TODO, Uncomment the function signature after defining Stack
+-- Node of Stack may be number or truth value
+data Node = Num Integer | Tval Bool deriving Show
 
--- stack2Str :: Stack -> String
-stack2Str = undefined -- TODO, Uncomment all the other function type declarations as you implement them
+-- To convert Node to String
+showNode :: Node -> String
+showNode (Num n) = show n
+showNode (Tval b) = show b
 
--- createEmptyState :: State
-createEmptyState = undefined -- TODO, Uncomment the function signature after defining State
+-- Stack is just a list of Nodes, head == top
+type Stack = [Node]
 
--- state2Str :: State -> String
-state2Str = undefined -- TODO
+-- State of machine is just pairs of (Char, Node)
+type State = [(String, Node)]
+
+createEmptyStack :: Stack
+createEmptyStack = []
+
+createEmptyState :: State
+createEmptyState = []
+
+stack2Str :: Stack -> String
+stack2Str [] = ""
+stack2Str (s:ss)    | null ss = showNode s
+                    | otherwise = showNode s ++ "," ++ stack2Str ss
+
+state2Str :: State -> String
+state2Str [] = ""
+state2Str st = state2StrAux (sortedState st)
+
+sortedState :: State -> State
+sortedState [] = []
+sortedState (x:xs) = sortedState smaller ++ [x] ++ sortedState larger
+  where
+    smaller = [a | a <- xs, fst a < fst x]
+    larger = [b | b <- xs, fst b > fst x]
+
+state2StrAux :: State -> String
+state2StrAux [] = ""
+state2StrAux (s:ss) | null ss = fst s ++ "=" ++ showNode (snd s)
+                    | otherwise = fst s ++ "=" ++ showNode (snd s) ++ "," ++ state2StrAux ss
+
 
 -- run :: (Code, Stack, State) -> (Code, Stack, State)
 run = undefined -- TODO
@@ -64,9 +94,9 @@ compile = undefined -- TODO
 parse = undefined -- TODO
 
 -- To help you test your parser
-testParser :: String -> (String, String)
-testParser programCode = (stack2Str stack, store2Str store)
-  where (_,stack,store) = run(compile (parse programCode), createEmptyStack, createEmptyStore)
+-- testParser :: String -> (String, String)
+-- testParser programCode = (stack2Str stack, store2Str store)
+--   where (_,stack,store) = run(compile (parse programCode), createEmptyStack, createEmptyStore)
 
 -- Examples:
 -- testParser "x := 5; x := x - 1;" == ("","x=4")
