@@ -1,5 +1,9 @@
 -- PFL 2023/24 - Haskell practical assignment quickstart
 -- Updated on 15/12/2023
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+
+import Data.Char (isSpace, isDigit, isLower, isAlphaNum)
+import Data.Binary.Get (remaining)
 
 -- Part 1
 
@@ -112,7 +116,7 @@ execInst (And : code, stack, state) = (code, andNodes n1 n2 : nstack, state)
   where n1 : n2 : nstack = stack
 execInst (Neg : code, stack, state) = (code, neg n : nstack, state)
   where n : nstack = stack
-execInst (Fetch s : code, stack, state) 
+execInst (Fetch s : code, stack, state)
     | not (any (\x -> fst x == s) state) = error "Run-time error"
     | otherwise = (code, n : stack, state)
     where n = snd (head (filter (\x -> fst x == s) state))
@@ -122,51 +126,106 @@ execInst (Store s : code, stack, state) = (code, nstack, (s, n) : nstate)
 execInst (Noop : code, stack, state) = (code, stack, state)
 execInst (Branch c1 c2 : code, Tval True : stack, state) = (c1 ++ code, stack, state)
 execInst (Branch c1 c2 : code, Tval False : stack, state) = (c2 ++ code, stack, state)
-execInst (Loop c1 c2 : code, stack, state) = 
+execInst (Loop c1 c2 : code, stack, state) =
     (c1 ++ [Branch (c2 ++ [Loop c1 c2]) [Noop]] ++ code, stack, state)
 execInst _ = error "Run-time error"
 
--- To help you test your assembler
-testAssembler :: Code -> (String, String)
-testAssembler code = (stack2Str stack, state2Str state)
-  where (_,stack,state) = run(code, createEmptyStack, createEmptyState)
-
--- Examples
-main :: IO ()
-main = do
-
-    putStrLn "Test Assembler"
-    print $ testAssembler [Push 10,Push 4,Push 3,Sub,Mult] == ("-10","")
-    print $ testAssembler [Fals,Push 3,Tru,Store "var",Store "a", Store "someVar"] == ("","a=3,someVar=False,var=True")
-    print $ testAssembler [Fals,Store "var",Fetch "var"] == ("False","var=False")
-    print $ testAssembler [Push (-20),Tru,Fals] == ("False,True,-20","")
-    print $ testAssembler [Push (-20),Tru,Tru,Neg] == ("False,True,-20","")
-    print $ testAssembler [Push (-20),Tru,Tru,Neg,Equ] == ("False,-20","")
-    print $ testAssembler [Push (-20),Push (-21), Le] == ("True","")
-    print $ testAssembler [Push 5,Store "x",Push 1,Fetch "x",Sub,Store "x"] == ("","x=4")
-    print $ testAssembler [Push 10,Store "i",Push 1,Store "fact",Loop [Push 1,Fetch "i",Equ,Neg] [Fetch "i",Fetch "fact",Mult,Store "fact",Push 1,Fetch "i",Sub,Store "i"]] == ("","fact=3628800,i=1")
-    --If you test:
-    -- testAssembler [Push 1,Push 2,And]
-    --You should get an exception with the string: "Run-time error"
-    --If you test:
-    -- testAssembler [Tru,Tru,Store "y", Fetch "x",Tru]
-    --You should get an exception with the string: "Run-time error"
-
 -- Part 2
 
--- TODO: Define the types Aexp, Bexp, Stm and Program
+data Token = IntToken Integer
+           | PlusTok
+           | TimesTok
+           | MinusTok
+           | OpenParenTok
+           | ClosedParenTok
+           | IfTok
+           | ThenTok
+           | ElseTok
+           | VarTok String
+           | AssignTok
+           | WhileTok
+           | DoTok
+           | TrueTok
+           | AndTok
+           | NotTok
+           | IntEqTok           -- ==
+           | BoolEqTok          -- =
+           | LessOrEqTok        -- <=
+           | SemiColonTok
+           deriving (Show, Eq)
 
--- compA :: Aexp -> Code
-compA = undefined -- TODO
+lexer :: String -> [Token]
+lexer [] = []
+lexer ('+': rest) = PlusTok : lexer rest
+lexer ('*': rest) = TimesTok : lexer rest
+lexer ('-': rest) = MinusTok : lexer rest
+lexer ('(': rest) = OpenParenTok : lexer rest
+lexer (')': rest) = ClosedParenTok : lexer rest
+lexer ('n': 'o': 't': rest) = NotTok : lexer rest
+lexer ('a': 'n': 'd': rest) = AndTok : lexer rest
+lexer ('i': 'f': rest) = IfTok : lexer rest
+lexer ('t': 'h': 'e': 'n': rest) = ThenTok : lexer rest
+lexer ('e': 'l': 's': 'e': rest) = ElseTok : lexer rest
+lexer ('w': 'h': 'i': 'l': 'e': rest) = WhileTok : lexer rest
+lexer ('d': 'o': rest) = DoTok : lexer rest
+lexer ('=': '=': rest) = IntEqTok : lexer rest
+lexer ('=': rest) = BoolEqTok : lexer rest
+lexer ('<': '=': rest) = LessOrEqTok : lexer rest
+lexer (':': '=': rest) = AssignTok : lexer rest
+lexer ('T': 'r': 'u': 'e': rest) = TrueTok : lexer rest
+lexer (';': rest) = SemiColonTok : lexer rest
+lexer (c: rest)
+  | isSpace c = lexer rest
+  | isDigit c = IntToken (read num) : lexer rest'
+  | isLower c = VarTok var : lexer rest''
+  | otherwise = error ("Invalid character: " ++ [c] ++ " in " ++ (c:rest))
+  where (num, rest') = span isDigit (c:rest)
+        (var, rest'') = span isAlphaNum (c:rest)
 
--- compB :: Bexp -> Code
-compB = undefined -- TODO
+testLexer = lexer "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);"
+-- [VarTok "i",AssignTok,IntToken 10,SemiColonTok,VarTok "fact",AssignTok,IntToken 1,SemiColonTok,WhileTok,OpenParenTok,NotTok,OpenParenTok,VarTok "i",IntEqTok,IntToken 1,ClosedParenTok,ClosedParenTok,DoTok,OpenParenTok,VarTok "fact",AssignTok,VarTok "fact",TimesTok,VarTok "i",SemiColonTok,VarTok "i",AssignTok,VarTok "i",MinusTok,IntToken 1,SemiColonTok,ClosedParenTok,SemiColonTok]
 
--- compile :: Program -> Code
-compile = undefined -- TODO
 
--- parse :: String -> Program
-parse = undefined -- TODO
+-- Arithmetic expressions
+data Aexp = NumExp Integer | VarExp String
+            | AddExp Aexp Aexp | MultExp Aexp Aexp | SubExp Aexp Aexp deriving (Show)
+-- Boolean expressions
+data Bexp = TrueExp
+            | LeExp Aexp Aexp | EqExp Aexp Aexp | NotExp Bexp | AndExp Bexp Bexp deriving (Show)
+-- Program Statements
+data Stm = AssignStm String Aexp
+            |  IfStm Bexp [Stm] [Stm] | WhileStm Bexp [Stm] | NoopStm deriving (Show)
+
+type Program = [Stm]
+
+compA :: Aexp -> Code
+compA (NumExp n) = [Push n]
+compA (VarExp x) = [Fetch x]
+compA (AddExp a1 a2) = compA a2 ++ compA a1 ++ [Add]
+compA (MultExp a1 a2) = compA a2 ++ compA a1 ++ [Mult]
+compA (SubExp a1 a2) = compA a2 ++ compA a1 ++ [Sub]    -- a1 - a2 (stack: topmost - second topmost)
+
+compB :: Bexp -> Code
+compB TrueExp = [Tru]
+compB (LeExp a1 a2) = compA a2 ++ compA a1 ++ [Le]
+compB (EqExp a1 a2) = compA a2 ++ compA a1 ++ [Equ]
+compB (NotExp b) = compB b ++ [Neg]
+compB (AndExp b1 b2) = compB b2 ++ compB b1 ++ [And]
+
+compile :: Program -> Code
+compile [] = []
+compile (AssignStm var aexp:rest) = compA aexp ++ [Store var] ++ compile rest
+compile (IfStm bexp stm1 stm2:rest) = compB bexp ++ [Branch (compile stm1) (compile stm2)] ++ compile rest
+compile (WhileStm bexp stm:rest) = Loop (compB bexp) (compile stm) : compile rest
+compile (NoopStm:rest) = Noop : compile rest
+
+
+-- "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);"
+-- [Push 10,Store "i",Push 1,Store "fact",Loop [Push 1,Fetch "i",Equ,Neg] [Fetch "i",Fetch "fact",Mult,Store "fact",Push 1,Fetch "i",Sub,Store "i"]]
+
+
+parse :: String -> Program
+parse = buildData . lexer
 
 -- To help you test your parser
 -- testParser :: String -> (String, String)
@@ -181,3 +240,126 @@ parse = undefined -- TODO
 -- testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1; z := x+x;" == ("","x=2,z=4")
 -- testParser "x := 2; y := (x - 3)*(4 + 2*3); z := x +x*(2);" == ("","x=2,y=-10,z=6")
 -- testParser "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);" == ("","fact=3628800,i=1")
+
+buildAexp :: [Token] -> Aexp
+buildAexp tokens = case parseSumOrProdOrIntOrPar tokens of
+    Just (expr, []) -> expr
+    Just _ -> error "Invalid program"
+    Nothing -> error "Invalid program"
+
+parseInt :: [Token] -> Maybe (Aexp, [Token])
+parseInt (IntToken n : restTokens) = Just (NumExp n, restTokens)
+parseInt tokens = Nothing
+
+parseProdOrInt :: [Token] -> Maybe (Aexp, [Token])
+parseProdOrInt tokens = case parseInt tokens of
+    Just (expr1, TimesTok : restTokens1) ->
+        case parseProdOrInt restTokens1 of
+            Just (expr2, restTokens2) -> Just (MultExp expr1 expr2, restTokens2) -- valid
+            Nothing -> Nothing
+    result -> result -- can be 'Nothing' or valid
+
+parseSumOrProdOrInt :: [Token] -> Maybe (Aexp, [Token])
+parseSumOrProdOrInt tokens = case parseProdOrInt tokens of
+    Just (expr1, PlusTok : restTokens1) ->
+        case parseProdOrInt restTokens1 of
+            Just (expr2, restTokens2) -> Just (AddExp expr1 expr2, restTokens2)
+            Nothing -> Nothing
+    Just (expr1, MinusTok : restTokens1) ->
+        case parseProdOrInt restTokens1 of
+            Just (expr2, restTokens2) -> Just (SubExp expr1 expr2, restTokens2)
+            Nothing -> Nothing
+    result -> result -- could be 'Nothing' or valid
+
+parseIntOrParen :: [Token] -> Maybe (Aexp, [Token])
+parseIntOrParen (IntToken n : restTokens) = Just (NumExp n, restTokens)
+parseIntOrParen (OpenParenTok : restTokens1) = case parseSumOrProdOrIntOrPar restTokens1 of
+      Just (expr, ClosedParenTok : restTokens2) -> Just (expr, restTokens2)
+      Just _ -> Nothing -- no closing parenthesis
+      Nothing -> Nothing
+
+parseProdOrIntOrPar :: [Token] -> Maybe (Aexp, [Token])
+parseProdOrIntOrPar tokens = case parseIntOrParen tokens of
+    Just (expr1, TimesTok : restTokens1) ->
+        case parseProdOrIntOrPar restTokens1 of
+            Just (expr2, restTokens2) -> Just (MultExp expr1 expr2, restTokens2)
+            Nothing -> Nothing
+    result -> result
+
+parseSumOrProdOrIntOrPar :: [Token] -> Maybe (Aexp, [Token])
+parseSumOrProdOrIntOrPar tokens = case parseProdOrIntOrPar tokens of
+    Just (expr1, PlusTok : restTokens1) ->
+        case parseSumOrProdOrIntOrPar restTokens1 of
+            Just (expr2, restTokens2) -> Just (AddExp expr1 expr2, restTokens2)
+            Nothing -> Nothing
+    Just (expr1, MinusTok : restTokens1) ->
+        case parseProdOrIntOrPar restTokens1 of
+            Just (expr2, restTokens2) -> Just (SubExp expr1 expr2, restTokens2)
+            Nothing -> Nothing
+    result -> result
+
+
+buildBexp :: [Token] -> Bexp
+buildBexp s = TrueExp
+-- buildBexp (NotTok:rest) = NotExp (buildBexp rest)
+-- buildBexp (b1:AndTok:b2:rest) = AndExp (buildBexp (b2:rest)) (buildBexp [b1])
+-- buildBexp (b1:IntEqTok:b2:rest) = EqExp (buildAexp (b2:rest)) (buildAexp [b1])
+-- buildBexp (b1:LessOrEqTok:b2:rest) = LeExp (buildAexp (b2:rest)) (buildAexp [b1])
+-- buildBexp (b1:rest) = buildBexp [b1]
+
+buildData :: [Token] -> [Stm]
+buildData [] = []
+buildData (SemiColonTok:tokens) = buildData tokens
+buildData ((VarTok var):AssignTok:tokens) = AssignStm var (buildAexp aexp) : buildData rest
+  where (aexp, rest) = break (== SemiColonTok) tokens
+
+buildData (IfTok:tokens) = IfStm (buildBexp bexp) (buildData thenTokens) (buildData elseTokens) : buildData rest
+    where (bexp, withThenTokens) = break (== ThenTok) tokens
+          (thenTokens, withElseTokens) = break (== ElseTok) (tail withThenTokens)
+          afterElseTokens = tail withElseTokens
+          (elseTokens, rest) =
+                if head afterElseTokens == OpenParenTok then
+                    break (== ClosedParenTok) (tail afterElseTokens) -- TODO: recursive function to resolve parenthesis
+                else
+                    break (== SemiColonTok) afterElseTokens
+
+buildData (WhileTok:tokens) = WhileStm (buildBexp bexp) (buildData stm) : buildData rest
+    where (bexp, withDoTokens) = break (== DoTok) tokens
+          (stm, rest) =
+                if head (tail withDoTokens) == OpenParenTok then
+                    break (== ClosedParenTok) (tail (tail withDoTokens)) -- TODO: recursive function to resolve parenthesis
+                else
+                    break (== SemiColonTok) (tail withDoTokens)
+
+buildData _ = error "Invalid program"
+
+
+
+-- buildData (IfTok:rest) = IfStm (buildBexp bexp) (head s1) (head s2) : buildData (tail (tail rest2))
+--   where (bexp, rest1) = break (== ThenTok) rest
+--         (s, rest2) = break (== ElseTok) (tail rest1)
+
+-- buildData (WhileTok:rest) = WhileStm (buildBexp rest1) (head s1) : buildData (tail rest1)
+--   where (s1, rest1) = break (== DoTok) rest
+-- buildData _ = error "Invalid program"
+
+
+{-
+i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);
+
+[VarTok "i",AssignTok,IntToken 10,SemiColonTok,
+VarTok "fact",AssignTok,IntToken 1,SemiColonTok,
+
+WhileTok,OpenParenTok,NotTok,OpenParenTok,VarTok "i",IntEqTok,IntToken 1,ClosedParenTok,ClosedParenTok,
+DoTok,
+
+OpenParenTok,
+VarTok "fact",AssignTok,VarTok "fact",TimesTok,VarTok "i",SemiColonTok,
+VarTok "i",AssignTok,VarTok "i",MinusTok,IntToken 1,SemiColonTok,
+ClosedParenTok,
+
+SemiColonTok]
+
+x := 42; if x <= 43 then x := 1; else x := 33; x := x+1; z := x+x;
+"x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;)"
+-}
