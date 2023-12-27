@@ -247,30 +247,6 @@ buildAexp tokens = case parseSumOrProdOrIntOrPar tokens of
     Just _ -> error "Invalid program"
     Nothing -> error "Invalid program"
 
-parseInt :: [Token] -> Maybe (Aexp, [Token])
-parseInt (IntToken n : restTokens) = Just (NumExp n, restTokens)
-parseInt tokens = Nothing
-
-parseProdOrInt :: [Token] -> Maybe (Aexp, [Token])
-parseProdOrInt tokens = case parseInt tokens of
-    Just (expr1, TimesTok : restTokens1) ->
-        case parseProdOrInt restTokens1 of
-            Just (expr2, restTokens2) -> Just (MultExp expr1 expr2, restTokens2) -- valid
-            Nothing -> Nothing
-    result -> result -- can be 'Nothing' or valid
-
-parseSumOrProdOrInt :: [Token] -> Maybe (Aexp, [Token])
-parseSumOrProdOrInt tokens = case parseProdOrInt tokens of
-    Just (expr1, PlusTok : restTokens1) ->
-        case parseProdOrInt restTokens1 of
-            Just (expr2, restTokens2) -> Just (AddExp expr1 expr2, restTokens2)
-            Nothing -> Nothing
-    Just (expr1, MinusTok : restTokens1) ->
-        case parseProdOrInt restTokens1 of
-            Just (expr2, restTokens2) -> Just (SubExp expr1 expr2, restTokens2)
-            Nothing -> Nothing
-    result -> result -- could be 'Nothing' or valid
-
 parseIntOrParen :: [Token] -> Maybe (Aexp, [Token])
 parseIntOrParen (IntToken n : restTokens) = Just (NumExp n, restTokens)
 parseIntOrParen (OpenParenTok : restTokens1) = case parseSumOrProdOrIntOrPar restTokens1 of
@@ -299,6 +275,11 @@ parseSumOrProdOrIntOrPar tokens = case parseProdOrIntOrPar tokens of
     result -> result
 
 
+
+-- (), <=, ==, not, =, and
+-- (not True and 2 <= 5 = 3 == 4)
+-- (not True) and ((2 <= 5) = (3 == 4))
+
 buildBexp :: [Token] -> Bexp
 buildBexp s = TrueExp
 -- buildBexp (NotTok:rest) = NotExp (buildBexp rest)
@@ -306,6 +287,26 @@ buildBexp s = TrueExp
 -- buildBexp (b1:IntEqTok:b2:rest) = EqExp (buildAexp (b2:rest)) (buildAexp [b1])
 -- buildBexp (b1:LessOrEqTok:b2:rest) = LeExp (buildAexp (b2:rest)) (buildAexp [b1])
 -- buildBexp (b1:rest) = buildBexp [b1]
+
+--parseBexp :: [Token] -> Maybe (Bexp, [Token])
+--parseBexp tokens = undefined
+-- parseBexp tokens = 
+-- parseIntEqNotBoolEqLeParen
+-- parseNotBoolEqLeParen
+-- parseBoolEqLeParen
+-- parseLeParen
+
+parseLeParenAexp :: [Token] -> Maybe (Bexp, [Token])
+-- parseLeParenAexp (LessOrEqTok: restTokens)
+-- parseLeParenAexp (Aexp : LessOrEqTok : Aexp : restTokens)
+parseLeParen (OpenParenTok : restTokens1) = case parseBexp restTokens1 of
+    Just (expr, ClosedParenTok: restTokens2) -> Just (expr, restTokens2)
+    Just _ -> Nothing   -- no closing parenthesis
+    Nothing -> Nothing  -- error on parseBexp
+
+
+--parseIntOrParen (IntToken n : restTokens) = Just (NumExp n, restTokens)
+
 
 buildData :: [Token] -> [Stm]
 buildData [] = []
