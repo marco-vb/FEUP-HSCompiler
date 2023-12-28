@@ -13,7 +13,7 @@ parse :: String -> Program
 parse = buildData . lexer
 
 -- ===========================================================================================
--- =                                        LEXER                                            =
+-- =                                        Lexer                                            =
 -- ===========================================================================================
 
 -- Tokens for lexer
@@ -62,19 +62,12 @@ lexer ('T': 'r': 'u': 'e': rest) = TrueTok : lexer rest
 lexer ('F': 'a': 'l': 's' : 'e': rest) = FalseTok : lexer rest
 lexer (';': rest) = SemiColonTok : lexer rest
 lexer (c: rest)
-  | isSpace c = lexer rest
-  | isDigit c = IntToken (read num) : lexer rest'
-  | isLower c = VarTok var : lexer rest''
+  | isSpace c = lexer rest  -- ignore spaces
+  | isDigit c = IntToken (read num) : lexer rest'   -- get digits and convert to integer
+  | isLower c = VarTok var : lexer rest''           -- starts w/ lowercase letter -> variable
   | otherwise = error ("Invalid character: " ++ [c] ++ " in " ++ (c:rest))
-  where (num, rest') = span isDigit (c:rest)
-        (var, rest'') = span isAlphaNum (c:rest)
-
-testLexer = lexer "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);" == 
-    [VarTok "i",AssignTok,IntToken 10,SemiColonTok,
-    VarTok "fact",AssignTok,IntToken 1,SemiColonTok,
-    WhileTok,OpenParenTok,NotTok,OpenParenTok,VarTok "i",IntEqTok,IntToken 1,ClosedParenTok,ClosedParenTok,
-    DoTok,OpenParenTok,VarTok "fact",AssignTok,VarTok "fact",TimesTok,VarTok "i",SemiColonTok,VarTok "i",AssignTok,VarTok "i",MinusTok,IntToken 1,SemiColonTok,ClosedParenTok,SemiColonTok]
-
+  where (num, rest') = span isDigit (c:rest)        -- get all digits
+        (var, rest'') = span isAlphaNum (c:rest)    -- get all alphanumeric characters
 
 
 -- ===========================================================================================
