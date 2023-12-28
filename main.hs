@@ -4,6 +4,7 @@
 
 import Data.Char (isSpace, isDigit, isLower, isAlphaNum)
 import Data.Binary.Get (remaining)
+import Debug.Trace (traceEvent, traceStack)
 
 -- Part 1
 
@@ -61,7 +62,7 @@ showNode (Tval b) = show b
 -- Stack is just a list of Nodes, head == top
 type Stack = [Node]
 
--- State of machine is just pairs of (Char, Node)
+-- State of machine is just pairs of (String, Node)
 type State = [(String, Node)]
 
 createEmptyStack :: Stack
@@ -191,7 +192,7 @@ data Aexp = NumExp Integer | VarExp String
             | AddExp Aexp Aexp | MultExp Aexp Aexp | SubExp Aexp Aexp deriving (Show)
 -- Boolean expressions
 data Bexp = TrueExp
-            | LeExp Aexp Aexp | EqExp Aexp Aexp | NotExp Bexp | AndExp Bexp Bexp deriving (Show)
+            | LeExp Aexp Aexp | IntEqExp Aexp Aexp | BoolEqExp Bexp Bexp | NotExp Bexp | AndExp Bexp Bexp deriving (Show)
 -- Program Statements
 data Stm = AssignStm String Aexp
             |  IfStm Bexp [Stm] [Stm] | WhileStm Bexp [Stm] | NoopStm deriving (Show)
@@ -208,7 +209,8 @@ compA (SubExp a1 a2) = compA a2 ++ compA a1 ++ [Sub]    -- a1 - a2 (stack: topmo
 compB :: Bexp -> Code
 compB TrueExp = [Tru]
 compB (LeExp a1 a2) = compA a2 ++ compA a1 ++ [Le]
-compB (EqExp a1 a2) = compA a2 ++ compA a1 ++ [Equ]
+compB (IntEqExp a1 a2) = compA a2 ++ compA a1 ++ [Equ]
+compB (BoolEqExp b1 b2) = compB b2 ++ compB b1 ++ [Equ]
 compB (NotExp b) = compB b ++ [Neg]
 compB (AndExp b1 b2) = compB b2 ++ compB b1 ++ [And]
 
@@ -244,8 +246,8 @@ parse = buildData . lexer
 buildAexp :: [Token] -> Aexp
 buildAexp tokens = case parseSumOrProdOrIntOrPar tokens of
     Just (expr, []) -> expr
-    Just _ -> error "Invalid program"
-    Nothing -> error "Invalid program"
+    Just _ -> error "Invalid program on buildAexp"
+    Nothing -> error "Invalid program on buildAexp"
 
 parseIntOrParen :: [Token] -> Maybe (Aexp, [Token])
 parseIntOrParen (IntToken n : restTokens) = Just (NumExp n, restTokens)
@@ -276,36 +278,92 @@ parseSumOrProdOrIntOrPar tokens = case parseProdOrIntOrPar tokens of
 
 
 
--- (), <=, ==, not, =, and
+getElseTokens :: [Token] -> ([Token], [Token])
+getElseTokens tokens = (elseTokens, restTokens)
+  where (_, elseTokens, restTokens) = getElseTokensAux tokens createEmptyStack []
+
+-- assumes there always are parenthesis
+-- TODO: Refactor Stack here
+getElseTokensAux :: [Token] -> Stack -> [Token] -> (Stack, [Token], [Token])  -- (stack, result, remainder)
+getElseTokensAux (OpenParenTok:tokens) stk res = getElseTokensAux tokens (Num 1:stk) (OpenParenTok:res)     -- push to stack and to res (return res and stack)
+getElseTokensAux (ClosedParenTok:tokens) stk res = getElseTokensAux tokens (tail stk) (ClosedParenTok:res)   -- pop from stack and push to res
+getElseTokensAux (tok:tokens) [] res = ([], res, tok:tokens)             -- stack is empty (parenthesis fully closed) -> return result
+getElseTokensAux (tok:tokens) stk res = getElseTokensAux tokens stk (tok:res)  -- if stack non-empty (non-closed parenthesis), token is part of the expression
+
+-- "(x := (3+4); y := 3)"
+-- testElseTokens = test [OpenParenTok, VarTok "x", AssignTok, OpenParenTok, IntToken 3, PlusTok, IntToken 4, ClosedParenTok, SemiColonTok, VarTok "y", AssignTok, IntToken 5, SemiColonTok, ClosedParenTok, VarTok "error"]
+
 -- (not True and 2 <= 5 = 3 == 4)
 -- (not True) and ((2 <= 5) = (3 == 4))
 
-buildBexp :: [Token] -> Bexp
-buildBexp s = TrueExp
--- buildBexp (NotTok:rest) = NotExp (buildBexp rest)
--- buildBexp (b1:AndTok:b2:rest) = AndExp (buildBexp (b2:rest)) (buildBexp [b1])
--- buildBexp (b1:IntEqTok:b2:rest) = EqExp (buildAexp (b2:rest)) (buildAexp [b1])
--- buildBexp (b1:LessOrEqTok:b2:rest) = LeExp (buildAexp (b2:rest)) (buildAexp [b1])
--- buildBexp (b1:rest) = buildBexp [b1]
 
---parseBexp :: [Token] -> Maybe (Bexp, [Token])
---parseBexp tokens = undefined
--- parseBexp tokens = 
--- parseIntEqNotBoolEqLeParen
--- parseNotBoolEqLeParen
--- parseBoolEqLeParen
--- parseLeParen
+-- Boolean expression (Bexp) can be:
+-- 1. True
+-- 2. Aexp <= Aexp
+-- 3. Aexp == Aexp
+-- 4. not Bexp
+-- 5. Bexp = Bexp
+-- 6. Bexp and Bexp
+-- 7. (Bexp)
 
-parseLeParenAexp :: [Token] -> Maybe (Bexp, [Token])
--- parseLeParenAexp (LessOrEqTok: restTokens)
--- parseLeParenAexp (Aexp : LessOrEqTok : Aexp : restTokens)
-parseLeParen (OpenParenTok : restTokens1) = case parseBexp restTokens1 of
-    Just (expr, ClosedParenTok: restTokens2) -> Just (expr, restTokens2)
-    Just _ -> Nothing   -- no closing parenthesis
-    Nothing -> Nothing  -- error on parseBexp
+--buildBexp :: [Token] -> Bexp
+buildBexp tokens = case parseBexp tokens of
+    Just (expr, []) -> expr
+    Just _ -> error "Invalid program BuildBexp invalid result"
+    Nothing -> error "Invalid program BuildBexp nothing"
+
+parseBexp :: [Token] -> Maybe (Bexp, [Token])
+parseBexp tokens = case parseTrueLeIEqNotEqAnd tokens of
+    Just (expr, []) -> Just (expr, [])
+    Just _ -> Nothing
+    Nothing -> Nothing
 
 
---parseIntOrParen (IntToken n : restTokens) = Just (NumExp n, restTokens)
+parseTrueLeIEqNotEqAnd :: [Token] -> Maybe (Bexp, [Token])
+parseTrueLeIEqNotEqAnd tokens = case parseTrueLeIEqNotEq tokens of
+    Just (expr1, AndTok : restTokens1) ->
+        case parseTrueLeIEqNotEqAnd restTokens1 of
+            Just (expr2, restTokens2) -> Just (AndExp expr1 expr2, restTokens2)
+            Nothing -> Nothing
+    result -> result
+
+parseTrueLeIEqNotEq :: [Token] -> Maybe (Bexp, [Token])
+parseTrueLeIEqNotEq tokens = case parseTrueLeIEqNot tokens of
+    Just (expr1, BoolEqTok : restTokens1) ->
+        case parseTrueLeIEqNotEq restTokens1 of
+            Just (expr2, restTokens2) -> Just (BoolEqExp expr1 expr2, restTokens2)
+            Nothing -> Nothing
+    result -> result
+
+parseTrueLeIEqNot :: [Token] -> Maybe (Bexp, [Token])
+parseTrueLeIEqNot (NotTok : rest) = case parseTrueLeIEqNot rest of
+    Just (expr, restTokens) -> Just (NotExp expr, restTokens)
+    Nothing -> Nothing
+parseTrueLeIEqNot tokens = parseTrueLeIeq tokens
+
+parseTrueLeIeq :: [Token] -> Maybe (Bexp, [Token])
+parseTrueLeIeq tokens = case parseSumOrProdOrIntOrPar tokens of   -- TODO
+    Just (expr1, IntEqTok : restTokens1) ->
+        case parseSumOrProdOrIntOrPar restTokens1 of
+            Just (expr2, restTokens2) -> Just (IntEqExp expr1 expr2, restTokens2)
+            Nothing -> Nothing
+    result -> parseTrueLe tokens  -- TODO
+
+parseTrueLe :: [Token] -> Maybe (Bexp, [Token])
+parseTrueLe tokens = case parseSumOrProdOrIntOrPar tokens of      -- TODO
+    Just (expr1, LessOrEqTok : restTokens1) ->
+        case parseSumOrProdOrIntOrPar restTokens1 of
+            Just (expr2, restTokens2) -> Just (LeExp expr1 expr2, restTokens2)
+            Nothing -> Nothing
+    result -> parseTrue tokens  -- if cannot parseAexp or there is no LessOrEqTok, call function below ? (TODO)
+
+-- parseTrue takes care of True and of parenthesis
+parseTrue :: [Token] -> Maybe (Bexp, [Token])
+parseTrue (TrueTok : restTokens) = Just (TrueExp, restTokens)
+parseTrue (OpenParenTok : restTokens1) = case parseBexp restTokens1 of
+    Just (expr, ClosedParenTok : restTokens2) -> Just (expr, restTokens2)
+    Just _ -> Nothing
+    Nothing -> Nothing
 
 
 buildData :: [Token] -> [Stm]
@@ -320,19 +378,21 @@ buildData (IfTok:tokens) = IfStm (buildBexp bexp) (buildData thenTokens) (buildD
           afterElseTokens = tail withElseTokens
           (elseTokens, rest) =
                 if head afterElseTokens == OpenParenTok then
-                    break (== ClosedParenTok) (tail afterElseTokens) -- TODO: recursive function to resolve parenthesis
+                    -- break (== ClosedParenTok) (tail afterElseTokens) -- TODO: recursive function to resolve parenthesis
+                    getElseTokens afterElseTokens
                 else
                     break (== SemiColonTok) afterElseTokens
 
-buildData (WhileTok:tokens) = WhileStm (buildBexp bexp) (buildData stm) : buildData rest
+buildData (WhileTok:tokens) = WhileStm (buildBexp bexp) (buildData doTokens) : buildData rest
     where (bexp, withDoTokens) = break (== DoTok) tokens
-          (stm, rest) =
+          (doTokens, rest) =
                 if head (tail withDoTokens) == OpenParenTok then
-                    break (== ClosedParenTok) (tail (tail withDoTokens)) -- TODO: recursive function to resolve parenthesis
+                    -- break (== ClosedParenTok) (tail (tail withDoTokens)) -- TODO: recursive function to resolve parenthesis
+                    getElseTokens (tail withDoTokens)
                 else
                     break (== SemiColonTok) (tail withDoTokens)
 
-buildData _ = error "Invalid program"
+buildData _ = error "Invalid program on buildData"
 
 
 
