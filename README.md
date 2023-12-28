@@ -7,6 +7,17 @@
 |    Félix Marcial Alves Martins    | 202108837 |  50   |
 | Marco Filipe Gonçalves Vilas Boas | 202108774 |  50   |
 
+## Running the Project
+To run the project, you should be inside the `src` folder. Then, you can run the following commands:
+
+```bash
+$ ghci
+$ :l main.hs
+$ main                  # runs some example tests given in the assignment
+$ additionalTests       # runs tests produced by us
+$ testParser "<input>"  # runs the parser on the given input
+```
+
 ## Description
 
 This project consists of the implementation of a compiler in Haskell for a simple imperative language. A possible input program is the following:
