@@ -147,6 +147,7 @@ data Token = IntToken Integer
            | WhileTok
            | DoTok
            | TrueTok
+           | FalseTok
            | AndTok
            | NotTok
            | IntEqTok           -- ==
@@ -174,6 +175,7 @@ lexer ('=': rest) = BoolEqTok : lexer rest
 lexer ('<': '=': rest) = LessOrEqTok : lexer rest
 lexer (':': '=': rest) = AssignTok : lexer rest
 lexer ('T': 'r': 'u': 'e': rest) = TrueTok : lexer rest
+lexer ('F': 'a': 'l': 's' : 'e': rest) = FalseTok : lexer rest
 lexer (';': rest) = SemiColonTok : lexer rest
 lexer (c: rest)
   | isSpace c = lexer rest
@@ -191,8 +193,8 @@ testLexer = lexer "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i;
 data Aexp = NumExp Integer | VarExp String
             | AddExp Aexp Aexp | MultExp Aexp Aexp | SubExp Aexp Aexp deriving (Show)
 -- Boolean expressions
-data Bexp = TrueExp
-            | LeExp Aexp Aexp | IntEqExp Aexp Aexp | BoolEqExp Bexp Bexp | NotExp Bexp | AndExp Bexp Bexp deriving (Show)
+data Bexp = TrueExp | FalseExp | LeExp Aexp Aexp | IntEqExp Aexp Aexp
+            | BoolEqExp Bexp Bexp | NotExp Bexp | AndExp Bexp Bexp deriving (Show)
 -- Program Statements
 data Stm = AssignStm String Aexp
             |  IfStm Bexp [Stm] [Stm] | WhileStm Bexp [Stm] | NoopStm deriving (Show)
@@ -208,6 +210,7 @@ compA (SubExp a1 a2) = compA a2 ++ compA a1 ++ [Sub]    -- a1 - a2 (stack: topmo
 
 compB :: Bexp -> Code
 compB TrueExp = [Tru]
+compB FalseExp = [Fals]
 compB (LeExp a1 a2) = compA a2 ++ compA a1 ++ [Le]
 compB (IntEqExp a1 a2) = compA a2 ++ compA a1 ++ [Equ]
 compB (BoolEqExp b1 b2) = compB b2 ++ compB b1 ++ [Equ]
@@ -229,19 +232,23 @@ compile (NoopStm:rest) = Noop : compile rest
 parse :: String -> Program
 parse = buildData . lexer
 
--- To help you test your parser
--- testParser :: String -> (String, String)
--- testParser programCode = (stack2Str stack, store2Str store)
---   where (_,stack,store) = run(compile (parse programCode), createEmptyStack, createEmptyStore)
+main :: IO ()
+main = do
+  putStrLn "Test Parser"
+  -- Examples:
+  print $ testParser "x := 5; x := x - 1;" == ("","x=4")
+  print $ testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1; else y := 2;" == ("","y=2")
+  print $ testParser "x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;)" == ("","x=1")
+  print $ testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1;" == ("","x=2")
+  print $ testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1; z := x+x;" == ("","x=2,z=4")
+  print $ testParser "x := 2; y := (x - 3)*(4 + 2*3); z := x +x*(2);" == ("","x=2,y=-10,z=6")
+  print $ testParser "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);" == ("","fact=3628800,i=1")
 
--- Examples:
--- testParser "x := 5; x := x - 1;" == ("","x=4")
--- testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1; else y := 2;" == ("","y=2")
--- testParser "x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;)" == ("","x=1")
--- testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1;" == ("","x=2")
--- testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1; z := x+x;" == ("","x=2,z=4")
--- testParser "x := 2; y := (x - 3)*(4 + 2*3); z := x +x*(2);" == ("","x=2,y=-10,z=6")
--- testParser "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);" == ("","fact=3628800,i=1")
+-- To help you test your parser
+testParser :: String -> (String, String)
+testParser programCode = (stack2Str stack, state2Str state)
+   where (_,stack,state) = run(compile (parse programCode), createEmptyStack, createEmptyState)
+
 
 buildAexp :: [Token] -> Aexp
 buildAexp tokens = case parseSumOrProdOrIntOrPar tokens of
@@ -251,10 +258,12 @@ buildAexp tokens = case parseSumOrProdOrIntOrPar tokens of
 
 parseIntOrParen :: [Token] -> Maybe (Aexp, [Token])
 parseIntOrParen (IntToken n : restTokens) = Just (NumExp n, restTokens)
+parseIntOrParen (VarTok var : restTokens) = Just (VarExp var, restTokens)
 parseIntOrParen (OpenParenTok : restTokens1) = case parseSumOrProdOrIntOrPar restTokens1 of
       Just (expr, ClosedParenTok : restTokens2) -> Just (expr, restTokens2)
       Just _ -> Nothing -- no closing parenthesis
       Nothing -> Nothing
+parseIntOrParen _ = Nothing
 
 parseProdOrIntOrPar :: [Token] -> Maybe (Aexp, [Token])
 parseProdOrIntOrPar tokens = case parseIntOrParen tokens of
@@ -278,17 +287,18 @@ parseSumOrProdOrIntOrPar tokens = case parseProdOrIntOrPar tokens of
 
 
 
-getElseTokens :: [Token] -> ([Token], [Token])
-getElseTokens tokens = (elseTokens, restTokens)
-  where (_, elseTokens, restTokens) = getElseTokensAux tokens createEmptyStack []
+getBetweenParenTokens :: [Token] -> ([Token], [Token])
+getBetweenParenTokens tokens = (elseTokens, restTokens)
+  where (_, elseTokens, restTokens) = getBetweenParenTokensAux tokens createEmptyStack []
 
 -- assumes there always are parenthesis
 -- TODO: Refactor Stack here
-getElseTokensAux :: [Token] -> Stack -> [Token] -> (Stack, [Token], [Token])  -- (stack, result, remainder)
-getElseTokensAux (OpenParenTok:tokens) stk res = getElseTokensAux tokens (Num 1:stk) (OpenParenTok:res)     -- push to stack and to res (return res and stack)
-getElseTokensAux (ClosedParenTok:tokens) stk res = getElseTokensAux tokens (tail stk) (ClosedParenTok:res)   -- pop from stack and push to res
-getElseTokensAux (tok:tokens) [] res = ([], res, tok:tokens)             -- stack is empty (parenthesis fully closed) -> return result
-getElseTokensAux (tok:tokens) stk res = getElseTokensAux tokens stk (tok:res)  -- if stack non-empty (non-closed parenthesis), token is part of the expression
+getBetweenParenTokensAux :: [Token] -> Stack -> [Token] -> (Stack, [Token], [Token])  -- (stack, result, remainder)
+getBetweenParenTokensAux [] stk res = ([], reverse res, [])                              -- no more tokens, return result
+getBetweenParenTokensAux (OpenParenTok:tokens) stk res = getBetweenParenTokensAux tokens (Num 1:stk) res     -- push to stack and to res (return res and stack)
+getBetweenParenTokensAux (ClosedParenTok:tokens) stk res = getBetweenParenTokensAux tokens (tail stk) res   -- pop from stack and push to res
+getBetweenParenTokensAux (tok:tokens) [] res = ([], reverse res, tok:tokens)             -- stack is empty (parenthesis fully closed) -> return result
+getBetweenParenTokensAux (tok:tokens) stk res = getBetweenParenTokensAux tokens stk (tok:res)  -- if stack non-empty (non-closed parenthesis), token is part of the expression
 
 -- "(x := (3+4); y := 3)"
 -- testElseTokens = test [OpenParenTok, VarTok "x", AssignTok, OpenParenTok, IntToken 3, PlusTok, IntToken 4, ClosedParenTok, SemiColonTok, VarTok "y", AssignTok, IntToken 5, SemiColonTok, ClosedParenTok, VarTok "error"]
@@ -354,6 +364,7 @@ parseTrueLe tokens = case parseSumOrProdOrIntOrPar tokens of      -- TODO
 -- parseTrue takes care of True and of parenthesis
 parseTrue :: [Token] -> Maybe (Bexp, [Token])
 parseTrue (TrueTok : restTokens) = Just (TrueExp, restTokens)
+parseTrue (FalseTok : restTokens) = Just (FalseExp, restTokens)
 parseTrue (OpenParenTok : restTokens1) = case parseTrueLeIEqNotEqAnd restTokens1 of
     Just (expr, ClosedParenTok : restTokens2) -> Just (expr, restTokens2)
     Just _ -> Nothing
@@ -368,12 +379,21 @@ buildData ((VarTok var):AssignTok:tokens) = AssignStm var (buildAexp aexp) : bui
 
 buildData (IfTok:tokens) = IfStm (buildBexp bexp) (buildData thenTokens) (buildData elseTokens) : buildData rest
     where (bexp, withThenTokens) = break (== ThenTok) tokens
-          (thenTokens, withElseTokens) = break (== ElseTok) (tail withThenTokens)
-          afterElseTokens = tail withElseTokens
+          afterThenTokens = tail withThenTokens
+          (thenTokens, withElseTokens) = 
+                if head afterThenTokens == OpenParenTok then
+                  getBetweenParenTokens afterThenTokens 
+                else
+                    break (== SemiColonTok) afterThenTokens
+          afterElseTokens =
+                if head withElseTokens == SemiColonTok then
+                  drop 2 withElseTokens   -- drop SemiColonTok and ElseTok
+                else
+                  tail withElseTokens     -- drop ElseTok
           (elseTokens, rest) =
                 if head afterElseTokens == OpenParenTok then
                     -- break (== ClosedParenTok) (tail afterElseTokens) -- TODO: recursive function to resolve parenthesis
-                    getElseTokens afterElseTokens
+                    getBetweenParenTokens afterElseTokens
                 else
                     break (== SemiColonTok) afterElseTokens
 
@@ -382,7 +402,7 @@ buildData (WhileTok:tokens) = WhileStm (buildBexp bexp) (buildData doTokens) : b
           (doTokens, rest) =
                 if head (tail withDoTokens) == OpenParenTok then
                     -- break (== ClosedParenTok) (tail (tail withDoTokens)) -- TODO: recursive function to resolve parenthesis
-                    getElseTokens (tail withDoTokens)
+                    getBetweenParenTokens (tail withDoTokens)
                 else
                     break (== SemiColonTok) (tail withDoTokens)
 
