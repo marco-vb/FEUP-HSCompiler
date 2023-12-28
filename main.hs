@@ -306,17 +306,11 @@ getElseTokensAux (tok:tokens) stk res = getElseTokensAux tokens stk (tok:res)  -
 -- 6. Bexp and Bexp
 -- 7. (Bexp)
 
---buildBexp :: [Token] -> Bexp
-buildBexp tokens = case parseBexp tokens of
+buildBexp :: [Token] -> Bexp
+buildBexp tokens = case parseTrueLeIEqNotEqAnd tokens of
     Just (expr, []) -> expr
     Just _ -> error "Invalid program BuildBexp invalid result"
     Nothing -> error "Invalid program BuildBexp nothing"
-
-parseBexp :: [Token] -> Maybe (Bexp, [Token])
-parseBexp tokens = case parseTrueLeIEqNotEqAnd tokens of
-    Just (expr, []) -> Just (expr, [])
-    Just _ -> Nothing
-    Nothing -> Nothing
 
 
 parseTrueLeIEqNotEqAnd :: [Token] -> Maybe (Bexp, [Token])
@@ -360,7 +354,7 @@ parseTrueLe tokens = case parseSumOrProdOrIntOrPar tokens of      -- TODO
 -- parseTrue takes care of True and of parenthesis
 parseTrue :: [Token] -> Maybe (Bexp, [Token])
 parseTrue (TrueTok : restTokens) = Just (TrueExp, restTokens)
-parseTrue (OpenParenTok : restTokens1) = case parseBexp restTokens1 of
+parseTrue (OpenParenTok : restTokens1) = case parseTrueLeIEqNotEqAnd restTokens1 of
     Just (expr, ClosedParenTok : restTokens2) -> Just (expr, restTokens2)
     Just _ -> Nothing
     Nothing -> Nothing
