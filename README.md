@@ -13,9 +13,11 @@ To run the project, you should be inside the `src` folder. Then, you can run the
 ```bash
 $ ghci
 $ :l Main.hs
-$ main                  # runs some example tests given in the assignment
-$ additionalTests       # runs tests produced by us
-$ testParser "<input>"  # runs the parser on the given input
+$ main                      # runs some example tests given in the assignment
+$ additionalTests           # runs tests produced by us
+$ assemblerTests            # runs tests for the assembler
+$ testParser "<input>"      # runs the parser on the given input
+$ testAssembler "<input>"   # runs the assembler on the given input
 ```
 
 ## Description

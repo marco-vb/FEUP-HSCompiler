@@ -1,20 +1,25 @@
 -- PFL 2023/24 - Haskell practical assignment
 
 import Parser (parse)
-import Assembler (run, createEmptyStack, createEmptyState, stack2Str, state2Str)
+import Assembler (run, createEmptyStack, createEmptyState, stack2Str, state2Str, assemblerTests, Code, 
+    Inst(Push, Add, Mult, Sub, Tru, Fals, Equ, Le, And, Neg, Fetch, Store, Noop, Branch, Loop))
 import Compiler (compile)
 
 main :: IO ()
 main = do
   putStrLn "Test Parser"
-  -- Examples:
-  print $ testParser "x := 5; x := x - 1;" == ("","x=4")
-  print $ testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1; else y := 2;" == ("","y=2")
-  print $ testParser "x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;);" == ("","x=1")
-  print $ testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1;" == ("","x=2")
-  print $ testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1; z := x+x;" == ("","x=2,z=4")
-  print $ testParser "x := 2; y := (x - 3)*(4 + 2*3); z := x +x*(2);" == ("","x=2,y=-10,z=6")
-  print $ testParser "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);" == ("","fact=3628800,i=1")
+  printTest 1 $ testParser "x := 5; x := x - 1;" == ("","x=4")
+  printTest 2 $ testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1; else y := 2;" == ("","y=2")
+  printTest 3 $ testParser "x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;);" == ("","x=1")
+  printTest 4 $ testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1;" == ("","x=2")
+  printTest 5 $ testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1; z := x+x;" == ("","x=2,z=4")
+  printTest 6 $ testParser "x := 2; y := (x - 3)*(4 + 2*3); z := x +x*(2);" == ("","x=2,y=-10,z=6")
+  printTest 7 $ testParser "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);" == ("","fact=3628800,i=1")
+
+-- To help testing the assembler
+testAssembler :: Code -> (String, String)
+testAssembler code = (stack2Str stack, state2Str state)
+  where (_,stack,state) = run(code, createEmptyStack, createEmptyState)
 
 -- To help testing the parser
 testParser :: String -> (String, String)
