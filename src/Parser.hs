@@ -40,7 +40,7 @@ data Token = IntToken Integer
            | SemiColonTok       -- ;
            deriving (Show, Eq)
 
-lexer :: String -> [Token]
+lexer :: String -> [Token]  -- converts a string into a list of tokens
 lexer [] = []
 lexer ('+': rest) = PlusTok : lexer rest
 lexer ('*': rest) = TimesTok : lexer rest
@@ -76,10 +76,13 @@ lexer (c: rest)
 
 buildData :: [Token] -> [Stm]
 buildData [] = []
-buildData (SemiColonTok:tokens) = buildData tokens
+buildData (SemiColonTok:tokens) = buildData tokens  -- ignore semicolons
+
+-- assigment statement
 buildData ((VarTok var):AssignTok:tokens) = AssignStm var (buildAexp aexp) : buildData rest
   where (aexp, rest) = break (== SemiColonTok) tokens
 
+-- if statement
 buildData (IfTok:tokens) = IfStm (buildBexp bexp) (buildData thenTokens) (buildData elseTokens) : buildData rest
     where (bexp, withThenTokens) = break (== ThenTok) tokens
           afterThenTokens = tail withThenTokens
@@ -99,6 +102,7 @@ buildData (IfTok:tokens) = IfStm (buildBexp bexp) (buildData thenTokens) (buildD
                 else
                     break (== SemiColonTok) afterElseTokens     -- only 1 statement w/o parenthesis
 
+-- while statement
 buildData (WhileTok:tokens) = WhileStm (buildBexp bexp) (buildData doTokens) : buildData rest
     where (bexp, withDoTokens) = break (== DoTok) tokens
           (doTokens, rest) =
@@ -114,7 +118,7 @@ buildData _ = error "Invalid program on buildData"
 -- ===========================================================================================
 -- =                          Parse and build arithmetic expressions                         =
 -- ===========================================================================================
-buildAexp :: [Token] -> Aexp
+buildAexp :: [Token] -> Aexp    -- build arithmetic expressions
 buildAexp tokens = case parseSumOrHigher tokens of
     Just (expr, []) -> expr
     Just _ -> error "Invalid program on buildAexp"
@@ -165,13 +169,13 @@ parseIntParenVar _ = Nothing     -- not Int, Var, or OpenParen: not Aexp
 -- 2. (Bexp), 3. Aexp <= Aexp, 4. Aexp == Aexp
 -- 5. not Bexp, 6. Bexp = Bexp, 7. Bexp and Bexp
 
-buildBexp :: [Token] -> Bexp
+buildBexp :: [Token] -> Bexp    -- build boolean expressions
 buildBexp tokens = case parseAndOrHigher tokens of
     Just (expr, []) -> expr
     Just _ -> error "Invalid program BuildBexp invalid result"
     Nothing -> error "Invalid program BuildBexp nothing"
 
-
+-- Handles "And" and calls parseBoolEqOrHigher to handle higher precedence
 parseAndOrHigher :: [Token] -> Maybe (Bexp, [Token])
 parseAndOrHigher tokens = case parseBoolEqOrHigher tokens of
     Just (expr1, AndTok : restTokens1) ->
@@ -180,6 +184,7 @@ parseAndOrHigher tokens = case parseBoolEqOrHigher tokens of
             Nothing -> Nothing
     result -> result
 
+-- Handles "=" (Bool equality) and calls parseNotOrHigher to handle higher precedence
 parseBoolEqOrHigher :: [Token] -> Maybe (Bexp, [Token])
 parseBoolEqOrHigher tokens = case parseNotOrHigher tokens of
     Just (expr1, BoolEqTok : restTokens1) ->
@@ -188,12 +193,15 @@ parseBoolEqOrHigher tokens = case parseNotOrHigher tokens of
             Nothing -> Nothing
     result -> result
 
+-- Handles "not" and calls parseIntEqOrHigher to handle higher precedence
 parseNotOrHigher :: [Token] -> Maybe (Bexp, [Token])
 parseNotOrHigher (NotTok : rest) = case parseNotOrHigher rest of
     Just (expr, restTokens) -> Just (NotExp expr, restTokens)
     Nothing -> Nothing
 parseNotOrHigher tokens = parseIntEqOrHigher tokens
 
+-- Handles "==" (Int equality) and calls parseLeOrHigher to handle higher precedence
+-- Calls parseSumOrHigher to parse arithmetic expressions
 parseIntEqOrHigher :: [Token] -> Maybe (Bexp, [Token])
 parseIntEqOrHigher tokens = case parseSumOrHigher tokens of
     Just (expr1, IntEqTok : restTokens1) ->
@@ -202,6 +210,8 @@ parseIntEqOrHigher tokens = case parseSumOrHigher tokens of
             Nothing -> Nothing
     result -> parseLeOrHigher tokens
 
+-- Handles "<=" and calls parseTrueParen to handle higher precedence
+-- Uses parseSumOrHigher to parse arithmetic expressions
 parseLeOrHigher :: [Token] -> Maybe (Bexp, [Token])
 parseLeOrHigher tokens = case parseSumOrHigher tokens of
     Just (expr1, LessOrEqTok : restTokens1) ->
@@ -210,7 +220,8 @@ parseLeOrHigher tokens = case parseSumOrHigher tokens of
             Nothing -> Nothing
     result -> parseTrueParen tokens  -- if cannot parseAexp or there is no LessOrEqTok
 
--- parseTrueParen takes care of True, False and of parenthesis
+-- parseTrueParen handles True, False and parenthesis
+-- Calls parseAndOrHigher to parse expressions inside parenthesis
 parseTrueParen :: [Token] -> Maybe (Bexp, [Token])
 parseTrueParen (TrueTok : restTokens) = Just (TrueExp, restTokens)
 parseTrueParen (FalseTok : restTokens) = Just (FalseExp, restTokens)
