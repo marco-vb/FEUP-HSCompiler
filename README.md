@@ -1,6 +1,6 @@
 # PFL Project 2 - Simple Compiler in Haskell
 
-## Group 5
+## Class 5 Group 11
 
 |               Name                |  Number   | Contribution (%) |
 | :-------------------------------: | :-------: | :--------------: |
@@ -33,7 +33,9 @@ while (not(i == 1)) do (
 );
 ```
 
-The compiler is divided into three main parts: the lexer, the parser and the assembler. The lexer is responsible for reading the input string and converting it into a list of tokens. The parser is responsible for reading the list of tokens and converting it into a list of Statements. The assembler is responsible for reading the list of Statements and converting it into a list of instructions.
+The compiler is divided into three main parts: the lexer, the parser and the assembler. The lexer is responsible for reading the input string and converting it into a list of tokens. The parser is responsible for reading the list of tokens and converting it into a list of Statements. After this there is a compile step where the list of Statements is translated into instructions of our virtual machine. Finally, the assembler takes this list of instructions and executes them one by one, effectively running the code and producing a result.
+
+<p style="page-break-after: always;">&nbsp;</p>
 
 ## Our Solution
 
@@ -186,6 +188,37 @@ buildData (WhileTok:tokens) = WhileStm (buildBexp bexp) (buildData doTokens) : b
                     break (== SemiColonTok) (tail withDoTokens)
 ```
 
+### Compiling statements
+
+After parsing the program and obtaining a list of statements, we need to convert them into a list of instructions.
+
+To do this, we created a function `compile` that receives the complete program and returns a list of instructions. We chose to represent a program as a list of statements.
+
+This function is responsible for compiling each type of statement. Additionally, we created auxiliary functions to compile arithmetic expressions and boolean expressions.
+
+For example, to compile an assignment statement, we just need to compile the arithmetic expression and then add the `Store` instruction to store the result of the expression in the variable. Below, we can see the implementation of the `compile` function for the assignment statement:
+
+```haskell
+type Program = [Stm]
+-- ...
+compile :: Program -> Code
+compile (AssignStm var aexp:rest) = compA aexp ++ [Store var] ++ compile rest
+```
+To compile an arithmetic expression, we just need to compile each subexpression and then add the corresponding instruction. Below, we can see the implementation of the `compA` function for the sum:
+
+```haskell
+compA :: Aexp -> Code
+compA (AddExp a1 a2) = compA a2 ++ compA a1 ++ [Add]
+```
+
+To compile a boolean expression, we just need to compile each subexpression and then add the corresponding instruction. Below, we can see the implementation of the `compB` function for the conjunction:
+
+```haskell
+compB :: Bexp -> Code
+compB (AndExp b1 b2) = compB b2 ++ compB b1 ++ [And]
+```
+
+
 ### Assembler
 
 #### Defining Instructions and Code
@@ -258,6 +291,8 @@ execInst (Add : code, stack, state) =
               n2 = Stack.top (Stack.pop stack)
               nstack = Stack.pop (Stack.pop stack)
 ```
+
+<p style="page-break-after: always;">&nbsp;</p>
 
 ## Conclusion
 
