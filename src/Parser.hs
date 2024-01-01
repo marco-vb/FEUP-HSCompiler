@@ -237,8 +237,9 @@ type RemainderTokens = [Token]
 
 -- assumes the expression always has parenthesis (must start with OpenParenTok)
 getBetweenParenTokens :: [Token] -> (ResultTokens, RemainderTokens)
-getBetweenParenTokens tokens = (elseTokens, restTokens)
-  where (restTokens, _, elseTokens) = getBetweenParenTokensAux tokens Stack.empty []
+getBetweenParenTokens tokens = (result, restTokens)
+  where (restTokens, _, intermediateResult) = getBetweenParenTokensAux tokens Stack.empty []
+        result = tail (init intermediateResult) -- remove first OpenParenTok and last ClosedParenTok
 
 -- Receives tokens to process, stack and current result
 -- Returns remainder, stack, and result
@@ -250,11 +251,11 @@ getBetweenParenTokensAux [] stk res = ([], Stack.empty, reverse res)
 
 -- push parenthesis to stack
 getBetweenParenTokensAux (OpenParenTok:tokens) stk res = 
-    getBetweenParenTokensAux tokens (Stack.push '(' stk) res
+    getBetweenParenTokensAux tokens (Stack.push '(' stk) (OpenParenTok:res)
 
 -- pop parenthesis from stack
 getBetweenParenTokensAux (ClosedParenTok:tokens) stk res = 
-    getBetweenParenTokensAux tokens (Stack.pop stk) res
+    getBetweenParenTokensAux tokens (Stack.pop stk) (ClosedParenTok:res)
 
 
 -- stack is empty (parenthesis fully closed) -> return result

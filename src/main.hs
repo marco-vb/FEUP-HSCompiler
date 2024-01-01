@@ -51,6 +51,13 @@ additionalTests = do
   printTest 20 $ testParser "x:=0; if(x+3)==3 then y:=2;else y:=1;" == ("","x=0,y=2")
   printTest 21 $ testParser "x:=0; if x+3==3 then y:=2;else y:=1;" == ("","x=0,y=2")
 
+  printTest 22 $ testParser "x := 5; if x == 5 then y := 2; else (if x == 3 then y := 3; else y := 4;);" == ("","x=5,y=2")
+  printTest 23 $ testParser "x := 5; if x == 5 then (if x == 3 then y := 3; else y := 4;); else y := 2;" == ("","x=5,y=4")
+  printTest 24 $ testParser "x := 2; while x <= 5 do (y := 1; while y <= 2 do (z := x + y; y := y + 1); x := x + 1);" == ("","x=6,y=3,z=7")
+  printTest 25 $ testParser "abc := 10; i := 0; sum := 0; while i <= abc do (if sum == 50 then result := i; else sum := sum; sum := sum + abc; i := i + 1;);" == ("","abc=10,i=11,result=5,sum=110")
+  printTest 26 $ testParser "x := 4; y := 4; i := 0; collisions := 0; while (i <= x) do (j := 0; while (j <= y) do (if (i == j) then (collisions := collisions + 1; if collisions == 5 then hurray := 1; else hurray := 0;); else collisions := collisions; j := j + 1;); i := i + 1;);" == ("","collisions=5,hurray=1,i=5,j=5,x=4,y=4")
+
+
 
 -- Prints the result of a test in format "Test n: OK" or "Test n: Failed"
 printTest :: Int -> Bool -> IO ()

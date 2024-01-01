@@ -44,10 +44,10 @@ equal (Num n1) (Num n2) = Tval (n1 == n2)
 equal (Tval b1) (Tval b2) = Tval (b1 == b2)
 equal _ _ = error "Run-time error"
 
--- To order two Nodes (error if the any of the two Nodes isn't num)
-less :: Node -> Node -> Node
-less (Num n1) (Num n2) = Tval (n1 < n2)
-less _ _ = error "Run-time error"
+-- Checks if the first Node is less than or equal to the second Node (error if the any of the two Nodes isn't num)
+lessOrEqual :: Node -> Node -> Node
+lessOrEqual (Num n1) (Num n2) = Tval (n1 <= n2)
+lessOrEqual _ _ = error "Run-time error"
 
 -- To negate a Node (error if the Node isn't tval)
 neg :: Node -> Node
@@ -141,7 +141,7 @@ execInst (Equ : code, stack, state) =
 
 -- Compare the two topmost Num of the Stack (less than or equal <=)
 execInst (Le : code, stack, state) = 
-    (code, Stack.push (less n1 n2) nstack, state)
+    (code, Stack.push (lessOrEqual n1 n2) nstack, state)
     where n1 = Stack.top stack
           n2 = Stack.top (Stack.pop stack)
           nstack = Stack.pop (Stack.pop stack)
